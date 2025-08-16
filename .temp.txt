@@ -1,0 +1,5 @@
+https://claude.ai/settings/profile
+https://console.anthropic.com/claude_code
+
+npx @anthropic-ai/claude-code
+source .venv/bin/activate

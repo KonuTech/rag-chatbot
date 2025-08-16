@@ -40,10 +40,15 @@ class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
 
+class SourceItem(BaseModel):
+    """Model for source items with optional links"""
+    text: str
+    url: Optional[str] = None
+
 class QueryResponse(BaseModel):
     """Response model for course queries"""
     answer: str
-    sources: List[str]
+    sources: List[SourceItem]
     session_id: str
 
 class CourseStats(BaseModel):
@@ -65,13 +70,30 @@ async def query_documents(request: QueryRequest):
         # Process query using RAG system
         answer, sources = rag_system.query(request.query, session_id)
         
+        # Convert sources to SourceItem objects
+        source_items = []
+        for source in sources:
+            if isinstance(source, dict):
+                # New format with text and url
+                source_items.append(SourceItem(
+                    text=source.get('text', str(source)),
+                    url=source.get('url')
+                ))
+            else:
+                # Old format - just text
+                source_items.append(SourceItem(text=str(source)))
+        
         return QueryResponse(
             answer=answer,
-            sources=sources,
+            sources=source_items,
             session_id=session_id
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_details = f"Query processing error: {str(e)}"
+        print(f"ERROR in /api/query: {error_details}")
+        print(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=error_details)
 
 @app.get("/api/courses", response_model=CourseStats)
 async def get_course_stats():

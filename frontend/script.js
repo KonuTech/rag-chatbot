@@ -5,7 +5,7 @@ const API_URL = '/api';
 let currentSessionId = null;
 
 // DOM elements
-let chatMessages, chatInput, sendButton, totalCourses, courseTitles;
+let chatMessages, chatInput, sendButton, totalCourses, courseTitles, newChatButton;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sendButton = document.getElementById('sendButton');
     totalCourses = document.getElementById('totalCourses');
     courseTitles = document.getElementById('courseTitles');
+    newChatButton = document.getElementById('newChatButton');
     
     setupEventListeners();
     createNewSession();
@@ -28,6 +29,9 @@ function setupEventListeners() {
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
+    
+    // New chat button
+    newChatButton.addEventListener('click', startNewChat);
     
     
     // Suggested questions
@@ -60,6 +64,13 @@ async function sendMessage() {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     try {
+        console.log('Sending query:', query);
+        console.log('Session ID:', currentSessionId);
+        
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+        
         const response = await fetch(`${API_URL}/query`, {
             method: 'POST',
             headers: {
@@ -68,10 +79,17 @@ async function sendMessage() {
             body: JSON.stringify({
                 query: query,
                 session_id: currentSessionId
-            })
+            }),
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
 
-        if (!response.ok) throw new Error('Query failed');
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`API Error ${response.status}:`, errorText);
+            throw new Error(`Query failed (${response.status}): ${errorText || 'Unknown error'}`);
+        }
 
         const data = await response.json();
         
@@ -87,7 +105,19 @@ async function sendMessage() {
     } catch (error) {
         // Replace loading message with error
         loadingMessage.remove();
-        addMessage(`Error: ${error.message}`, 'assistant');
+        
+        console.error('Query error:', error);
+        
+        let errorMessage;
+        if (error.name === 'AbortError') {
+            errorMessage = 'Request timed out. Please try again.';
+        } else if (error.message.includes('Failed to fetch')) {
+            errorMessage = 'Network error. Please check your connection and try again.';
+        } else {
+            errorMessage = `Error: ${error.message}`;
+        }
+        
+        addMessage(errorMessage, 'assistant');
     } finally {
         chatInput.disabled = false;
         sendButton.disabled = false;
@@ -122,10 +152,26 @@ function addMessage(content, type, sources = null, isWelcome = false) {
     let html = `<div class="message-content">${displayContent}</div>`;
     
     if (sources && sources.length > 0) {
+        // Handle both old string format and new object format for backward compatibility
+        const sourceLinks = sources.map(source => {
+            if (typeof source === 'string') {
+                // Old format - just display as text
+                return escapeHtml(source);
+            } else if (source && source.text) {
+                // New format - create link if URL exists
+                if (source.url) {
+                    return `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" class="source-link">${escapeHtml(source.text)}</a>`;
+                } else {
+                    return escapeHtml(source.text);
+                }
+            }
+            return escapeHtml(String(source));
+        });
+        
         html += `
             <details class="sources-collapsible">
                 <summary class="sources-header">Sources</summary>
-                <div class="sources-content">${sources.join(', ')}</div>
+                <div class="sources-content">${sourceLinks.join(', ')}</div>
             </details>
         `;
     }
@@ -150,6 +196,27 @@ async function createNewSession() {
     currentSessionId = null;
     chatMessages.innerHTML = '';
     addMessage('Welcome to the Course Materials Assistant! I can help you with questions about courses, lessons and specific content. What would you like to know?', 'assistant', null, true);
+}
+
+function startNewChat() {
+    // Clear current session
+    currentSessionId = null;
+    
+    // Clear chat messages
+    chatMessages.innerHTML = '';
+    
+    // Clear any pending input
+    chatInput.value = '';
+    
+    // Re-enable input if it was disabled
+    chatInput.disabled = false;
+    sendButton.disabled = false;
+    
+    // Add welcome message
+    addMessage('Welcome to the Course Materials Assistant! I can help you with questions about courses, lessons and specific content. What would you like to know?', 'assistant', null, true);
+    
+    // Focus on input
+    chatInput.focus();
 }
 
 // Load course statistics

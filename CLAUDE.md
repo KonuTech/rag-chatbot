@@ -9,6 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install Python dependencies
 uv sync
 
+# Install development dependencies (includes code quality tools)
+uv sync --group dev
+
 # Set up environment variables
 cp .env.example .env
 # Edit .env and add your ANTHROPIC_API_KEY
@@ -22,6 +25,23 @@ chmod +x run.sh
 
 # Manual start (from project root)
 cd backend && uv run uvicorn app:app --reload --port 8000
+```
+
+**Code Quality:**
+```bash
+# Format code with black and isort
+bash scripts/format.sh
+
+# Run linting checks (flake8, isort, black)
+bash scripts/lint.sh
+
+# Run all quality checks (tests + linting)
+bash scripts/quality.sh
+
+# Individual tools
+uv run black backend/ main.py           # Format code
+uv run isort backend/ main.py            # Sort imports
+uv run flake8 backend/ main.py           # Lint code
 ```
 
 **API Endpoints:**
